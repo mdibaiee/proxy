@@ -1,9 +1,12 @@
+{-# LANGUAGE Rank2Types #-}
 module Modify ( modify
               , Criteria (..)
               ) where
 
-import HTTPWorker
+import Worker
 import HTTPParser
+import H2Parser
+import Request
 import Data.List
 
 data Criteria = Criteria { method :: String
@@ -19,10 +22,10 @@ modify (c:cs) handler req =
         handler (replace c req)
     else
         modify cs handler req
-    where match c r = method c == httpMethod r && prefix c `isPrefixOf` httpPath r
-          replace c (HTTPRequest m p v h b) = let head = prefix c
-                                                  t1 = drop (length head) p
-                                                  cond = flip elem $ terminator c
-                                                  tail = dropWhile (not.cond) t1
-                                                  path = head ++ replacement c ++ tail
-                                              in HTTPRequest m path v h b
+    where match c r = method c == requestMethod r && prefix c `isPrefixOf` requestPath r
+          replace c rq = let head = prefix c
+                             t1 = drop (length head) (requestPath rq)
+                             cond = flip elem $ terminator c
+                             tail = dropWhile (not.cond) t1
+                             path = head ++ replacement c ++ tail
+                         in setRequestPath rq path

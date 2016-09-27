@@ -1,7 +1,6 @@
 module HTTPParser ( HTTPRequest (..)
-                  , parseHTTP
-                  , parse
                   , httpParser
+                  , parseHTTP
                   ) where
 
 import Text.Parsec
@@ -11,6 +10,7 @@ import Text.Parsec.Combinator
 import Text.Parsec.Char
 import Data.ByteString hiding (elem, count)
 import Data.ByteString.UTF8 (fromString, toString)
+import Request as R
 
 data HTTPRequest = HTTPRequest {
         httpMethod :: String,
@@ -20,10 +20,18 @@ data HTTPRequest = HTTPRequest {
         httpBody :: ByteString
     }
 
-parseHTTP :: ByteString -> Maybe HTTPRequest
+instance Request HTTPRequest where
+  requestMethod = httpMethod
+  requestHeaders = httpHeaders
+  setRequestHeaders r a = r { httpHeaders = a }
+  requestPath = httpPath
+  setRequestPath r a = r { httpPath = a }
+  parseRequest = parseHTTP
+
+parseHTTP :: ByteString -> Either String HTTPRequest
 parseHTTP i = case parse httpParser "" i of
-    Right e -> Just e
-    Left e -> Nothing
+    Right e -> Right e
+    Left e -> Left ("Couldn't parse HTTP Request" ++ show i ++ "\n" ++ show e)
 
 httpParser :: Parser HTTPRequest
 httpParser = do

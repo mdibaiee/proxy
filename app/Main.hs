@@ -1,18 +1,22 @@
+{-# LANGUAGE Rank2Types #-}
 module Main where
 
 import System.Environment
 import qualified Server as S
 import qualified Network.Socket as S
-import HTTPWorker
+import Worker
 import Proxy
 import ProxyAuth
 import Data.Default.Class
 import Data.Maybe
 import System.Exit
 import Control.Monad
+import HTTPParser
+import H2Parser
+import Server (Recv, Send)
+import Request
 
 data Settings = Settings { bindAddress    :: String
-                         , bufferSize     :: Int
                          , authentication :: String
                          , realm          :: String
                          , https          :: Maybe S.HTTPS
@@ -20,7 +24,6 @@ data Settings = Settings { bindAddress    :: String
                          } deriving (Show)
 instance Default Settings where
   def = Settings { bindAddress    = "0.0.0.0"
-                 , bufferSize     = 2^18
                  , authentication = ""
                  , realm          = ""
                  , https          = Nothing
@@ -31,7 +34,6 @@ main = do
     args <- getArgs
     let settings = parseArgs args def :: Settings
     let servSett = def { S.bindAddress = bindAddress settings
-                       , S.bufferSize  = bufferSize settings
                        , S.http        = http settings
                        , S.https       = https settings
                        } :: S.ServerSettings
@@ -46,11 +48,12 @@ main = do
       print "You must specify at least one of --http or --https parameters"
       exitFailure
 
-    let handler = if null (authentication settings) then
-            handleRequest
-        else
-            proxyAuth (authentication settings) (realm settings) handleRequest
-    S.server servSett.httpWorker handler $ (Nothing, [])
+    let handler = handleRequest :: HTTPRequest -> Send -> Recv -> State -> IO (Bool, State)
+    if null (authentication settings)
+      then
+        S.server servSett . worker handleRequest $ (Nothing, [])
+      else
+        S.server servSett . worker (proxyAuth (authentication settings) (realm settings) handleRequest) $ (Nothing, [])
 
 parseArgs :: [String] -> Settings -> Settings
 parseArgs [] s = s
